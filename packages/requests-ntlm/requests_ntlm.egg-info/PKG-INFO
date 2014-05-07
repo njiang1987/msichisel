@@ -1,0 +1,17 @@
+Metadata-Version: 1.1
+Name: requests-ntlm
+Version: 0.0.2.3
+Summary: This package allows for HTTP NTLM authentication using the requests library.
+Home-page: UNKNOWN
+Author: Ben Toews
+Author-email: mastahyeti@gmail.com
+License: ISC
+Description: UNKNOWN
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2.6
+Classifier: Programming Language :: Python :: 2.7
+Classifier: License :: OSI Approved :: ISC License (ISCL)
+Provides: requests_ntlm
