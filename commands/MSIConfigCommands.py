@@ -29,7 +29,7 @@ class MSIConfigCommand(fb.FBCommand):
     def options(self):
         return [
                 fb.FBCommandArgument(short='-u', long='--url', arg='url', type='string', default='', help='Config mobile app with url'),
-                fb.FBCommandArgument(short='-d', long='--id', arg='id', type='string', default='', help='TQMS ID')
+                fb.FBCommandArgument(short='-d', long='--id', arg='id', type='string', default='880507', help='TQMS ID')
         ]
 
     def getPureUrlLink(self, dirty_url):
@@ -59,11 +59,7 @@ class MSIConfigCommand(fb.FBCommand):
             print "error, -d or -u missing!"
             return
 
-        # = 1, means using id
-        # = 2, means using url, so we need to wait lldb to input 'msiopen [document path]' to open document
-        config_type = 0
-
-        # 1. Generate url first
+        # 1. Generate url and document path first
         if options.id is not None and options.id != "":
             tqms_dict = getTQMSInformationDict(options.id)
 
@@ -71,29 +67,41 @@ class MSIConfigCommand(fb.FBCommand):
                 if tqms_dict[key] is None or tqms_dict[key] == "":
                     print "Error when get %s for TQMS: %s" % (key, options.id)
 
-            url_str = tqms_dict['url']
+            config_url = tqms_dict['url']
             document_path = tqms_dict['document']
+            path_separator = "->"
 
         elif options.url is not None and options.url != "":
-            url_str = options.url
+            config_url = options.url
 
-        url_str = self.getPureUrlLink(url_str)
-        print "url_str = %s" % url_str
+        config_url = self.getPureUrlLink(config_url)
+        print "config_url = %s" % config_url
+        print "document_path = %s" % document_path
 
-        # 2. Apply url link
-        if url_str is not None:
-            url = fb.evaluateExpression('(NSURL*)[NSURL URLWithString:@"%s"]' % url_str)
+        # 2. Config the document path into FolderPathSearcher
+        if document_path is not None:
+            lldb.debugger.HandleCommand('expression [FolderPathSearcher getInstance]')
+            if document_path is not None and document_path != "":
+                expr = '[[FolderPathSearcher getInstance] setSearchPath:@"'+ document_path +'" Separator:@"'+ path_separator +'"]'
+                lldb.debugger.HandleCommand('expression ' + expr)
+
+        # 3. Apply url link
+        if config_url is not None:
+            url = fb.evaluateExpression('(NSURL*)[NSURL URLWithString:@"%s"]' % config_url)
             application = fb.evaluateExpression('(UIApplication*)[UIApplication sharedApplication]')
             delegate = fb.evaluateExpression('[(UIApplication*)%s delegate]' % application)
             lldb.debugger.HandleCommand('expr (void)[%s application:%s openURL:%s sourceApplication:nil annotation:nil]' % (delegate, application, url))
+#            if document_path is not None and document_path != "":
+#                expr = '[[FolderPathSearcher getInstance] startSearchWithPath:@"'+ document_path +'" Separator:@"'+ path_separator +'"]'
+#                lldb.debugger.HandleCommand('expression ' + expr)
             print '------ end config ------'
         else:
             print 'Failed to generate the url link, please check your url or TQMS ID is correct!'
 
-        # 3. Continue run our app
+        # 4. Continue run our app
         # lldb.debugger.SetAsync(True)
         # lldb.debugger.GetSelectedTarget().GetProcess().Continue()
 
 # the following code is used for testing
 # config = MSIConfigCommand()
-# config.run(None, {"id": "880507"})
+# config.run(['880507'], config.options())
