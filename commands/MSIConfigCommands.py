@@ -69,7 +69,7 @@ class MSIConfigCommand(fb.FBCommand):
 
             config_url = tqms_dict['url']
             document_path = tqms_dict['document']
-            path_separator = "->"
+            path_separator = tqms_dict['separator']
 
         elif options.url is not None and options.url != "":
             config_url = options.url
@@ -79,7 +79,7 @@ class MSIConfigCommand(fb.FBCommand):
         print "document_path = %s" % document_path
 
         # 2. Config the document path into FolderPathSearcher
-        if document_path is not None:
+        if document_path is not None and path_separator is not None:
             lldb.debugger.HandleCommand('expression [FolderPathSearcher getInstance]')
             if document_path is not None and document_path != "":
                 expr = '[[FolderPathSearcher getInstance] setSearchPath:@"'+ document_path +'" Separator:@"'+ path_separator +'"]'
@@ -91,16 +91,13 @@ class MSIConfigCommand(fb.FBCommand):
             application = fb.evaluateExpression('(UIApplication*)[UIApplication sharedApplication]')
             delegate = fb.evaluateExpression('[(UIApplication*)%s delegate]' % application)
             lldb.debugger.HandleCommand('expr (void)[%s application:%s openURL:%s sourceApplication:nil annotation:nil]' % (delegate, application, url))
-#            if document_path is not None and document_path != "":
-#                expr = '[[FolderPathSearcher getInstance] startSearchWithPath:@"'+ document_path +'" Separator:@"'+ path_separator +'"]'
-#                lldb.debugger.HandleCommand('expression ' + expr)
             print '------ end config ------'
         else:
             print 'Failed to generate the url link, please check your url or TQMS ID is correct!'
 
         # 4. Continue run our app
-        # lldb.debugger.SetAsync(True)
-        # lldb.debugger.GetSelectedTarget().GetProcess().Continue()
+        lldb.debugger.SetAsync(True)
+        lldb.debugger.GetSelectedTarget().GetProcess().Continue()
 
 # the following code is used for testing
 # config = MSIConfigCommand()

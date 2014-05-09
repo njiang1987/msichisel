@@ -16,6 +16,10 @@ import ConfigParser
 import getpass
 from requests_ntlm import HttpNtlmAuth
 
+URL_CONFIG_LINK_KEY_IPAD = 'iPad'
+URL_CONFIG_LINK_KEY_IPHONE = 'iPhone'
+DOCUMENT_PATH_KEY = 'Folder'
+
 def getConfigFilePath():
     return '/tmp/MicroStrategy/TQMS.cfg'
 
@@ -27,8 +31,10 @@ def getAuthorizationCookies(username):
     password = getpass.getpass('Password for ' + username + ': ')
     login_url = 'https://tech-websrvr.labs.microstrategy.com/Technology/TQMSWeb/login/login.aspx?ReturnUrl=%2fTechnology%2fTQMSWeb%2fviewissue%2fviewissuewindow.aspx%3fid%3d877255%26searchid%3d2746652&id=877255&searchid=2746652'
     response = requests.get(login_url, auth = HttpNtlmAuth(username, password))
-    cookies = response.request._cookies
-    return cookies
+    if response.status_code == 200:
+        return response.request._cookies
+    else:
+        return None
 
 def recordCookies(cookies):
     print 'msilldbconfighelpers.py - recordCookies'
@@ -56,8 +62,6 @@ def dumpCookies(cookies):
         str = ""
         for key in cookie_dict:
             str += key + '=' + cookie_dict[key] + '; '
-
-        print str
         return str
     except Exception, e:
         print e
@@ -78,28 +82,74 @@ def combinationRequestHeaders(cookies):
                 "Cookie": cookies}
     return headers
 
+def generateValueStringWithKey(origin_str, key):
+    try:
+        start_str = '<' + key + '>'
+        end_str = '</' + key + '>'
+        result = ''
+
+        if origin_str is None or origin_str == "":
+            return None
+
+        str_list = origin_str.split(start_str)
+        if len(str_list) <= 1:
+            return None
+        last_str = str_list[len(str_list) - 1]
+
+        last_index = string.find(last_str, end_str)
+        if last_index == -1:
+            raise "String format is wrong for key: %s" % key
+        result_str = last_str[:last_index]
+
+        return result_str
+
+    except Exception, e:
+        print e
+
 # Find URL string
 # 1. Order: comments->full description
 # 2. Keywords: mstr://
 # 3. We should distinguish iPad and iPhone device config url link
 def generateConfigURLLink(comments, full_description):
     try:
+        # 1. try to find config url from comments
         if comments is not None:
+            # a. first try to use <iPad>XXXX</iPad> or <iPhone>XXXX</iPhone> to generate config url
+            result_str = generateValueStringWithKey(comments, URL_CONFIG_LINK_KEY_IPAD)
+            if result_str is not None:
+                if string.find(result_str, 'mstr://') != -1:
+                    return result_str
+
+            # b. try to find url which start with "mstr://"
             start_index = string.find(comments, 'mstr://')
+            if start_index != -1:
+                substr = full_description[start_index:]
+                results = substr.split('\r\n')
+                if len(results) > 0:
+                    return results[0]
 
-        if start_index == -1:
-            start_index = string.find(full_description, 'mstr://')
+        # 2. then try to generate config url from full description
+        if full_description is not None:
+            # a. first try to use <iPad>XXXX</iPad> or <iPhone>XXXX</iPhone> to generate config url
+            result_str = generateValueStringWithKey(full_description, URL_CONFIG_LINK_KEY_IPAD)
+            if result_str is not None:
+                if string.find(result_str, 'mstr://') != -1:
+                    return result_str
 
-        if start_index == -1:
-            raise Exception('The full description formatting is wrong, please use "mstr://" as the prefix of mobile config link')
-        else:
-            substr = full_description[start_index:]
+            # b. try to find url which start with "mstr://"
+            if start_index == -1:
+                start_index = string.find(full_description, 'mstr://')
 
-        results = substr.split('\r\n')
-        if len(results) == 0:
-            raise Exception("Failed to get the end index of config link!")
-        else:
-            return results[0]
+            if start_index == -1:
+                raise Exception('The full description formatting is wrong, please use "mstr://" as the prefix of mobile config link')
+            else:
+                substr = full_description[start_index:]
+
+            results = substr.split('\r\n')
+            if len(results) == 0:
+                raise Exception("Failed to get the end index of config link!")
+            else:
+                return results[0]
     except Exception, e:
         print e
         return None
@@ -109,7 +159,47 @@ def generateConfigURLLink(comments, full_description):
 # 2. We should suggest using '/' or '>' or '->' to split
 def generateDocumentPath(comments, full_description):
     try:
-        return 'MicroStrategy Tutorial->iPad->CTC->Single Feature->Document Viewer->02 Selector->2.1 Selector Title Bar->2.1.2 Title Bar Format->Font_ListBox'
+        # return 'MicroStrategy Tutorial->iPad->CTC->Single Feature->Document Viewer->02 Selector->2.1 Selector Title Bar->2.1.2 Title Bar Format->Font_ListBox'
+        # 1. first try to generate document path from comments
+        if comments is not None:
+            document_path = generateValueStringWithKey(comments, DOCUMENT_PATH_KEY)
+            if document_path is not None:
+                return document_path
+
+        # 2. then try to generate document path from full description
+        if full_description is not None:
+            document_path = generateValueStringWithKey(full_description, DOCUMENT_PATH_KEY)
+            if document_path is not None:
+                return document_path
+
+        return None
+    except Exception, e:
+        print e
+        return None
+
+# We should suggest using '/' or '>' or '->' to split
+def getSeparatorForDocumentPath(path):
+    try:
+        separator_dict = {}
+        separator_dict['/'] = len(path.split('/')) - 1
+        separator_dict['>'] = len(path.split('>')) - 1
+        separator_dict['->'] = len(path.split('->')) - 1
+
+        result_key = ''
+        max_count = 0
+        for key in separator_dict:
+            if separator_dict[key] > max_count:
+                result_key = key
+
+        if result_key == '>' or result_key == '->':
+            if separator_dict['->'] == 0:
+                result_key = '>'
+            else:
+                if separator_dict['->'] <= separator_dict['>']:
+                    result_key = '->'
+
+        return result_key
+
     except Exception, e:
         print e
         return None
@@ -176,7 +266,7 @@ def getTQMSInformationDict(tqms):
         if response.status_code != 200:
             raise "Failed to get the authorization with Username!"
         else:
-            # 2. parse json string
+            # 3. parse json string
             issue_infos = json.loads(response.text)['d']
             full_description_u = issue_infos['Description']
             comments_u = issue_infos['Comments']
@@ -185,12 +275,13 @@ def getTQMSInformationDict(tqms):
             if full_description is None or full_description == '':
                 raise Exception("Failed to get the full description for TQMS: %s" % tqms)
             else:
-                # print full_description
                 config_url = generateConfigURLLink(comments, full_description)
                 document_path = generateDocumentPath(comments, full_description)
-                return {"url": config_url, "document": document_path}
+                path_separator = getSeparatorForDocumentPath(document_path)
+                return {"url": config_url, "document": document_path, "separator": path_separator}
                 
     except Exception, e:
         print e
 
 # print getTQMSInformationDict('854318')
+# print getTQMSInformationDict('880507')
